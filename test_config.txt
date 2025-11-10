@@ -1,0 +1,5 @@
+!CONFIGSTART
+filename test_data.xlsm psig lbf
+geometry in [3.139 0.75 1.8] [3.139 0.75 1.8] [3.139 0.75 1.8] [3.139 1 1.8]
+throat in 0.546 0.531 0.515
+!CONFIGEND
