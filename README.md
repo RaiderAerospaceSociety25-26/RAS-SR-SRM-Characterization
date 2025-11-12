@@ -6,6 +6,7 @@ NOTE: BATES GRAINS ONLY!
 Nakka characterization resources:
 [Nakka PTBurn](https://www.nakka-rocketry.net/ptburn.html)
 [Nakka Burnrate](https://www.nakka-rocketry.net/burnrate.html)
+[Nakka Burnrate Simple](https://www.nakka-rocketry.net/burnrate-simple.htm)
 
 This method uses the method listed at the PTBurn link.
 
