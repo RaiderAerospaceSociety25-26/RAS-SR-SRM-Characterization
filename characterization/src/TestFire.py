@@ -1,20 +1,34 @@
 import pandas as pd
 
 class TestFire:
-    def __init__(self, fireIndex, pressUnits, thrustUnits, geomUnits, throatUnits, geometry, throat, dat):
-        self._fireIndex = fireIndex
-        self._pressUnits = pressUnits
-        self._thrustUnits = thrustUnits
-        self._geomUnits = geomUnits
-        self._throatUnits = throatUnits
-        self._geometry = geometry
-        self._throat = throat
-        self._dat = dat
+    # def __init__(self, filename, sheetnames, fireIndex, pressUnits, thrustUnits, geomUnits, throatUnits, geometry, throat, dat):
+    #     self._filename = filename
+    #     self._sheetnames = sheetnames
+    #     self._fireIndex = fireIndex
+    #     self._pressUnits = pressUnits
+    #     self._thrustUnits = thrustUnits
+    #     self._geomUnits = geomUnits
+    #     self._throatUnits = throatUnits
+    #     self._geometry = geometry
+    #     self._throat = throat
+    #     self._dat = dat
     
     def __init__(self):
         pass
     
     #getters and setters
+
+    def get_filename(self):
+        return self._filename
+
+    def set_filename(self, value):
+        self._filename = value
+
+    def get_sheetnames(self):
+        return self._sheetnames
+
+    def set_sheetnames(self, value):
+        self._sheetnames = value
 
     def get_fireIndex(self):
         return self._fireIndex
@@ -63,3 +77,11 @@ class TestFire:
 
     def set_dat(self, value):
         self._dat = value
+
+
+    #special helper functions
+    def printAllAttributes(obj):
+        print(f"\nAttributes of {obj.__class__.__name__}:\n" + "-" * 40)
+        for attr, value in vars(obj).items():
+            print(f"{attr}: {value}")
+        print("-" * 40)
