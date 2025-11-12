@@ -42,6 +42,8 @@ def setImportOptions(allConfigs):
         fileEntry = allConfigs[x][0].split(" ")
         geomEntry = allConfigs[x][1].split(" ")
         throatEntry = allConfigs[x][2].split(" ")
+        massEntry = allConfigs[x][3].split(" ")
+        densityEntry = allConfigs[x][4].split(" ")
         arr = []
         for y in range(len(throatEntry)-2): #for each fire, set filename, pressure units, thrust units, geometry units, geometry, throat units, and throat
             testFire = TestFire()
@@ -50,7 +52,7 @@ def setImportOptions(allConfigs):
                 testFire.set_filename(fileEntry[1])
                 #set sheetnames
                 excelFile = pd.ExcelFile(dataFilenameBase + testFire.get_filename()) #define pandas ExcelFile object
-                sheetnames = excelFile.sheet_names #get sheet names (and by proxy number of sheets) in Excel workbook
+                sheetnames = excelFile.sheet_names #get sheet names in Excel workbook
                 testFire.set_sheetnames(sheetnames)
                 testFire.set_pressUnits(fileEntry[2])
                 testFire.set_thrustUnits(fileEntry[3])
@@ -70,6 +72,14 @@ def setImportOptions(allConfigs):
                 testFire.set_throatUnits(throatEntry[1])
                 testFire.set_throat(float(throatEntry[y+2]))
             else: throwParseError()
+            if(massEntry[0] == "mass"):
+                testFire.set_massUnits(massEntry[1])
+                testFire.set_mass(float(massEntry[y+2]))
+            else: throwParseError()
+            if(densityEntry[0] == "density"):
+                testFire.set_densityUnits(densityEntry[1])
+                testFire.set_density(float(densityEntry[y+2]))
+            else: throwParseError()
             arr.append(testFire)
         testFires.append(arr)
 
@@ -86,8 +96,8 @@ def readExcelData(allConfigs):
 
 
 # --------------------- CHARACTERIZATION --------------------------
-#start characterization functions here
-def characterization():
+#characterization function
+def characterize():
     pass
 
 

@@ -1,7 +1,7 @@
 import pandas as pd
 
 class TestFire:
-    # def __init__(self, filename, sheetnames, fireIndex, pressUnits, thrustUnits, geomUnits, throatUnits, geometry, throat, dat):
+    # def __init__(self, filename, sheetnames, fireIndex, pressUnits, thrustUnits, geomUnits, throatUnits, geometry, throat, massUnits, mass, densityUnits, density, dat):
     #     self._filename = filename
     #     self._sheetnames = sheetnames
     #     self._fireIndex = fireIndex
@@ -11,6 +11,10 @@ class TestFire:
     #     self._throatUnits = throatUnits
     #     self._geometry = geometry
     #     self._throat = throat
+    #     self._massUnits = massUnits
+    #     self._mass = mass
+    #     self._densityUnits = densityUnits
+    #     self._density = density
     #     self._dat = dat
     
     def __init__(self):
@@ -71,6 +75,30 @@ class TestFire:
 
     def set_throat(self, value):
         self._throat = value
+    
+    def get_massUnits(self):
+        return self._massUnits
+
+    def set_massUnits(self, value):
+        self._massUnits = value
+    
+    def get_mass(self):
+        return self._mass
+
+    def set_mass(self, value):
+        self._mass = value
+
+    def get_densityUnits(self):
+        return self._densityUnits
+
+    def set_densityUnits(self, value):
+        self._densityUnits = value
+
+    def get_density(self):
+        return self._density
+
+    def set_density(self, value):
+        self._density = value
 
     def get_dat(self):
         return self._dat

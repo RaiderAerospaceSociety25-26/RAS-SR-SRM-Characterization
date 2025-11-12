@@ -2,9 +2,13 @@
 filename test_data.xlsx psig lbf
 geometry in 3.139,0.75,1.8||3.139,0.75,1.8||3.139,0.75,1.8||3.139,1,1.8
 throat in 0.546 0.531 0.515
+mass lb 1.525 1.525 1.525
+density lb/in3 0.0589986 0.0589986 0.0589986
 !CONFIGEND
 !CONFIGSTART
-filename test_data_2.xlsx psig lbf
+filename test_data.xlsx psig lbf
 geometry in 3.139,0.75,1.8||3.139,0.75,1.8||3.139,0.75,1.8||3.139,1,1.8
 throat in 0.546 0.531 0.515
+mass lb 1.525 1.525 1.525
+density lb/in3 0.0589986 0.0589986 0.0589986
 !CONFIGEND
