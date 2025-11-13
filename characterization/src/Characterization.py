@@ -1,6 +1,10 @@
 # ------------------ IMPORT ----------------
 import pandas as pd
 from TestFire import TestFire
+from Calculation import Calculation
+from scipy.optimize import fsolve
+import numpy as np
+import math
 
 
 # ----------------------------- GLOBAL VARIABLES ----------------------------
@@ -96,8 +100,160 @@ def readExcelData(allConfigs):
 
 
 # --------------------- CHARACTERIZATION --------------------------
-#characterization function
-def characterize():
+#take the data associated with each TestFire object and do necessary conversions and calculations to define a Calculation object, adding it to the TestFire object
+#a Calculation object contains all the data necessary for characterization. in addition, all data is in metric units so there is no unit confusion during the characterization calculations.
+def conversionsAndDefinitions():
+    x = 0
+    for tfList in testFires:
+        y = 0
+        for tf in tfList:
+            data = testFires[x][y].get_dat()
+
+            #burn_time
+            burn_time = data.iloc[len(data.iloc[:,0])-1,0]
+
+            #time
+            time = data.iloc[:,0]
+
+            #pressure
+            if (tf.get_pressUnits() == "psig"): press = data.iloc[:,1]*6894.76 #convert psi to Pa
+            elif (tf.get_pressUnits() == "kPa"): press = data.iloc[:,1]*1000 #convert kPa to Pa
+            else: throwParseError()
+            
+            #thrust
+            if (tf.get_thrustUnits() == "N"): thrust = data.iloc[:,2]
+            elif (tf.get_thrustUnits() == "lbf"): thrust = data.iloc[:,2]*4.44822 #convert lbf to N
+            else: throwParseError()
+
+            #mass
+            if (tf.get_thrustUnits() == "N"): mass = tf.get_mass()
+            elif (tf.get_massUnits() == "lb"): mass = tf.get_mass()*0.453592 #convert lbm to kg
+            else: throwParseError()
+
+            #density
+            if (tf.get_densityUnits() == "kg/m3"): density = tf.get_density()
+            elif (tf.get_densityUnits() == "lb/in3"): density = tf.get_density()*27679.9 #convert lbm/in^3 to kg/m^3
+            else: throwParseError()
+            
+            #throat_area
+            if (tf.get_throatUnits() == "m"): throat_area = math.pi*(math.pow(tf.get_throat(),2)/4)
+            elif (tf.get_throatUnits() == "in"): throat_area = math.pi*(math.pow((tf.get_throat()*0.0254),2)/4) #convert to m^2
+            else: throwParseError()
+
+            #grain_length
+            grain_len = []
+            for grain in tf.get_geometry():
+                if (tf.get_geomUnits() == "m"): grain_len.append(float(grain[0]))
+                elif (tf.get_geomUnits() == "in"): grain_len.append(float(grain[0])*0.0254) #convert to m
+                else: throwParseError()
+
+            #grain_init_core
+            grain_init_core = []
+            for grain in tf.get_geometry():
+                if (tf.get_geomUnits() == "m"): grain_init_core.append(float(grain[1]))
+                elif (tf.get_geomUnits() == "in"): grain_init_core.append(float(grain[1])*0.0254) #convert to m
+                else: throwParseError()
+
+            #grain_OD
+            grain_OD = []
+            for grain in tf.get_geometry():
+                if (tf.get_geomUnits() == "m"): grain_OD.append(float(grain[2]))
+                elif (tf.get_geomUnits() == "in"): grain_OD.append(float(grain[2])*0.0254) #convert to m
+                else: throwParseError()
+
+            #impulse
+            impulse = np.trapezoid(thrust, time)
+
+            #press_integral
+            press_integral = np.trapezoid(press, time)
+
+            #c_star
+            c_star = (throat_area/mass)*press_integral
+
+            #isp
+            isp = impulse/mass
+
+            #make Calculation object
+            calc = Calculation(time, press, thrust, mass, density, throat_area, grain_len, grain_init_core, grain_OD, burn_time, impulse, press_integral, c_star, isp)
+            testFires[x][y].set_calculation(calc)
+
+            #increment i
+            y += 1
+        x += 1
+
+
+#function to perform all characterization calculations
+#probably use either scipy.optimize.root_scalar() or scipy.optimize.fsolve()
+def characterization():
+    """
+    function arguments:
+    ds: instantaneous change in surface regression (variable that is changed to solve the equation)
+    D: grain outer diameter
+    d_0: grain initial core diameter
+    L_0 = grain initial length
+    rho_b = propellant density
+    A_t = throat area
+    dt = time step
+    P = instantaneous pressure
+    s_prev = the s value for the previous iteration of the function
+    c_star = C*
+    """
+    def characterizationEqns(ds, D, d_0, L_0, rho_b, A_t, dt, P, s_prev, c_star):
+        """
+        additional variables:
+        A_b = instantaneous burn area
+        s = surface regression amount
+        """
+        #note: not exactly sure how to take into account changing the number of grains (bc that would require parameterizing the equation?). I'm sure there's a way to do it though.
+        s = s_prev + ds
+        A_b = 0.0
+        i = 0
+        for num in D:
+            A_b += math.pi*((0.5*(math.pow(D[i],2))-math.pow((d_0[i]+(2*s)),2) + (L_0[i]-(2*s))*(d_0[i]+(2*s)))) #SOMETHING IS THROWING AN ARRAY-RELATED ERROR HERE!!!
+            i += 1
+        #print(A_b)
+        zero_func = ds - ((A_t*P*dt)/(A_b*rho_b*c_star))
+        return zero_func
+
+    x = 0
+    for tfList in testFires:
+        y = 0
+        for tf in tfList:
+            calc = testFires[x][y].get_calculation()
+            dsArr = [] #array for ds
+            sArr = [] #array for s
+            i = 0
+            for line in calc.get_time():
+                s_initial = 0.001 #initial guess for s
+                D = calc.get_grain_OD()
+                d_0 = calc.get_grain_init_core()
+                L_0 = calc.get_grain_len()
+                rho_b = calc.get_density()
+                A_t = calc.get_throat_area()
+                dt = 0
+                s_prev = 0
+                if (i != 0):
+                    dt = calc.get_time().iloc[i] - calc.get_time().iloc[i-1]
+                    s_prev = sArr[i-1]
+                P = calc.get_press().iloc[i] # instantaneous pressure
+                c_star = calc.get_c_star()
+                if (i != 0):
+                    ds_new = fsolve(characterizationEqns, s_initial, args=(D, d_0, L_0, rho_b, A_t, dt, P, s_prev, c_star))
+                    #print("solved")
+                    dsArr.append(float(ds_new))
+                    sArr.append(sArr[i-1] + float(ds_new))
+                else:
+                    sArr.append(0)
+                    dsArr.append(0)
+                i += 1
+            print(sArr)
+            print(dsArr)
+            y += 1
+        x += 1
+
+
+#function to perform conversions of important output data back to imperial and output to an Excel sheet
+def output():
     pass
 
 
@@ -119,8 +275,8 @@ def main():
     printAllTestFireListAttributes()
 
     #characterization calculations
-    #start here
-
+    conversionsAndDefinitions()
+    characterization()
 
 
 main()
