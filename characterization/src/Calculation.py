@@ -102,3 +102,30 @@ class Calculation:
 
     def set_isp(self, value):
         self._isp = value
+    
+    
+    #getters and setters for variables not in the constructor
+    
+    def set_sArr(self, sArr):
+        self.sArr = sArr
+
+    def get_sArr(self):
+        return self.sArr
+
+    def set_dsArr(self, dsArr):
+        self.dsArr = dsArr
+
+    def get_dsArr(self):
+        return self.dsArr
+
+    def set_A_bArr(self, A_bArr):
+        self.A_bArr = A_bArr
+
+    def get_A_bArr(self):
+        return self.A_bArr
+
+    def set_ds_dtArr(self, ds_dtArr):
+        self.ds_dtArr = ds_dtArr
+
+    def get_ds_dtArr(self):
+        return self.ds_dtArr
