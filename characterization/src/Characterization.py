@@ -4,6 +4,7 @@ import pandas as pd
 from TestFire import TestFire
 from Calculation import Calculation
 from scipy.optimize import fsolve
+from scipy.optimize import curve_fit
 import numpy as np
 import math
 import matplotlib.pyplot as plt
@@ -174,7 +175,7 @@ def conversionsAndDefinitions():
             c_star = (throat_area/mass)*press_integral
 
             #isp
-            isp = impulse/mass
+            isp = impulse/(mass*9.81)
 
             #make Calculation object and add it to the proper TestFire object
             calc = Calculation(time, press, thrust, mass, density, throat_area, grain_len, grain_init_core, grain_OD, burn_time, impulse, press_integral, c_star, isp)
@@ -214,7 +215,6 @@ def characterization():
             A_b += math.pi*((0.5*((math.pow(D[i],2))-math.pow((d_0[i]+(2*s)),2)) + (L_0[i]-(2*s))*(d_0[i]+(2*s)))) #SOMETHING IS THROWING AN ARRAY-RELATED ERROR HERE!!!
             i += 1
         zero_func = ds - ((A_t*P*dt)/(A_b*rho_b*c_star))
-        #print(zero_func)
         return zero_func
 
     x = 0
@@ -261,14 +261,6 @@ def characterization():
             testFires[x][y].get_calculation().set_sArr(sArr)
             testFires[x][y].get_calculation().set_dsArr(dsArr)
             testFires[x][y].get_calculation().set_ds_dtArr(ds_dt_arr)
-            # print("sArr:")
-            # print(sArr)
-            # print("dsArr:")
-            # print(dsArr)
-            # print("A_bArr:")
-            # print(A_bArr)
-            # print("ds/dt:")
-            # print(ds_dt_arr)
             y += 1
         x += 1
 
@@ -324,7 +316,9 @@ def outputResults():
 
         #lists for average pressure and average burn rate for characterization
         avgPress = []
+        avgPressImperial = []
         avgBurnrate = []
+        avgBurnrateImperial = []
 
         y = 0
         for tf in tfList:
@@ -346,7 +340,6 @@ def outputResults():
             ds_dt_imperial = [i * 39.3701 for i in calc.get_ds_dtArr()] #convert to in/sec
             #note that everything other than time, thrust, pressure is in an array. time, thrust, and pressure are in DataFrames.
 
-            #TODO: DEFINE ALL EXTRA DATA LIKE PRESSURE AND THRUST INTEGRALS, C*, ISP, ETC. SO THEY CAN BE WRITTEN TO EXCEL FILE TOO
             #also calculate average pressure and average thrust and add it to the arrays
 
             #thrust vs time and pressure vs time (metric)
@@ -450,13 +443,73 @@ def outputResults():
                  pd.DataFrame({"Instantaneous Regression ds (in)": ds_imperial}),
                  pd.DataFrame({"Cumulative Regression s (in)": s_imperial}),
                  pd.DataFrame({"Instantaneous Burn Rate ds/dt (in/sec)": ds_dt_imperial})], axis=1)
-            #print(finalDataFrame)
+
+            #write more data for the fire to the spreadsheet
+            burn_time = calc.get_burn_time()
+            impulse = calc.get_impulse() #N*s
+            press_integral = calc.get_press_integral()/1000000 #MPa*s
+            c_star = calc.get_c_star() #m/s? I think?
+            isp = calc.get_isp() #sec
+            impulse_imperial = impulse*0.224809
+            press_integral_imperial = press_integral*145.03773773
+            c_star_imperial = c_star*3.280839895
+            avg_press = press_integral / burn_time
+            avg_press_imperial = press_integral_imperial / burn_time
+            burnrate_integral = abs(np.trapezoid(time, ds_dt))
+            burnrate_integral_imperial = abs(np.trapezoid(time, ds_dt_imperial))
+            avg_burnrate = burnrate_integral / burn_time
+            avg_burnrate_imperial = burnrate_integral_imperial / burn_time
+            extra_data_arr = np.array([burn_time, impulse, press_integral, c_star, avg_press, avg_burnrate, impulse_imperial, press_integral_imperial, c_star_imperial, avg_press_imperial, avg_burnrate_imperial, isp])
+            extra_data_arr_strings = np.array(["Burn Time (sec)", "Impulse (N*s)", "Pressure Integral (MPa*s)", "C* (m/s)", "Average Pressure (MPa)", "Average Burnrate (mm/s)", "Impulse (lbf*s)", "Pressure Integral (psig*s)", "C* (ft/s)", "Average Pressure (psig)", "Average Burnrate (in/s)", "ISP (sec)"])
+            finalDataFrame = pd.concat([finalDataFrame, pd.DataFrame({"str": extra_data_arr_strings}), pd.DataFrame({"dat": extra_data_arr})], axis=1)
+
+            #write final dataframe to excel
             finalDataFrame.to_excel(excelWriter, sheet_name=str(y))
+
+            #add averages to the correct arrays for later characterization calculations
+            avgPress.append(avg_press)
+            avgPressImperial.append(avg_press_imperial)
+            avgBurnrate.append(avg_burnrate)
+            avgBurnrateImperial.append(avg_burnrate_imperial)
+
             y += 1
+        
+        #function for calculating burnrate
+        def func_powerlaw(x, a, n):
+            return a * x**n
+        
+        params, covariance = curve_fit(func_powerlaw, avgPress, avgBurnrate, maxfev=6000)
+        a, n = params
+        params_imperial, covariance_imperial = curve_fit(func_powerlaw, avgPressImperial, avgBurnrateImperial, maxfev=6000)
+        a_imperial, n_imperial = params_imperial
+        strings = np.array(["Metric (MPa and mm):", "a", "n", "Imperial (psig and in):", "a", "n"])
+        data = np.array([None, a, n, None, a_imperial, n_imperial])
+        characterizationDataframe = pd.concat([pd.DataFrame({"str": strings}), pd.DataFrame({"dat": data})], axis=1)
+        characterizationDataframe.to_excel(excelWriter, sheet_name="Characterization")
+
+        #TODO: delete sheet named "Sheet" in the excel workbook
         excelWriter.close()
 
-        #TODO: CALCULATE BURN RATE!! add this information (avg pressures, avg burnrates, a and n coefficients for both sets of units mm/sec+MPa and in/sec+psi) to a new sheet in the excel workbook, and create and output a figure for the power curve fit for both sets of units
+        #output characterization plots
+        x_metric = np.linspace(0, 6, 300)
+        y_metric = a * (x_metric**n)
+        plt.figure(figsize=(13, 8))
+        plt.plot(x_metric, y_metric, linestyle='--', label="Power Law Fit")
+        plt.scatter(avgPress, avgBurnrate, marker='o', c='b', label="Average Burnrate vs. Average Pressure")
+        plt.xlabel("Average Pressure (MPa)")
+        plt.ylabel("Average Burn Rate (mm/sec)")
+        plt.savefig(outputFileDir + "/characterization_metric_" + str(x))
+        plt.close()
 
+        x_imperial = np.linspace(0, 700, 300)
+        y_imperial = a_imperial * (x_imperial**n_imperial)
+        plt.figure(figsize=(13, 8))
+        plt.plot(x_imperial, y_imperial, linestyle='--', label="Power Law Fit")
+        plt.scatter(avgPressImperial, avgBurnrateImperial, marker='o', c='b', label="Average Burnrate vs. Average Pressure")
+        plt.xlabel("Average Pressure (psig)")
+        plt.ylabel("Average Burn Rate (in/sec)")
+        plt.savefig(outputFileDir + "/characterization_imperial_" + str(x))
+        plt.close()
 
         x += 1
 
@@ -477,7 +530,7 @@ def main():
     allConfigs = readImportOptions()
     setImportOptions(allConfigs)
     readExcelData(allConfigs)
-    printAllTestFireListAttributes()
+    #printAllTestFireListAttributes()
 
     #characterization calculations
     conversionsAndDefinitions()
