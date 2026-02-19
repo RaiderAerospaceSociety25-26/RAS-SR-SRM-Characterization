@@ -319,6 +319,10 @@ def outputResults():
         avgPressImperial = []
         avgBurnrate = []
         avgBurnrateImperial = []
+        avgPressHigh = []
+        avgPressImperialHigh = []
+        avgBurnrateHigh = []
+        avgBurnrateImperialHigh = []
 
         y = 0
         for tf in tfList:
@@ -453,24 +457,50 @@ def outputResults():
             impulse_imperial = impulse*0.224809
             press_integral_imperial = press_integral*145.03773773
             c_star_imperial = c_star*3.280839895
-            avg_press = press_integral / burn_time
-            avg_press_imperial = press_integral_imperial / burn_time
-            burnrate_integral = abs(np.trapezoid(time, ds_dt))
-            burnrate_integral_imperial = abs(np.trapezoid(time, ds_dt_imperial))
+            full_avg_press = press_integral / burn_time #average pressure calculated using the full pressure integral
+            full_avg_press_imperial = press_integral_imperial / burn_time
+            # ---------------------- average pressure and average burnrate calculation using only points with a pressure greater than the average pressure calculated above using the full pressure integral
+            #(note this method may have issues if a fire has extremely noisy pressure data or if there is a massive drop in pressure and then a subsequent massive increase in pressure that should be considered, HOWEVER, I think it should generally be more accurate)
+            press_trimmed = np.array([])
+            time_trimmed = np.array([])
+            burnrate_trimmed = np.array([])
+            burnrate_trimmed_imperial = np.array([])
+            started_adding = False
+            i = 0
+            for p in press:
+                if p < full_avg_press and started_adding: break
+                if p > full_avg_press:
+                    press_trimmed = np.append(press_trimmed, press[i])
+                    time_trimmed = np.append(time_trimmed, time[i])
+                    burnrate_trimmed = np.append(burnrate_trimmed, ds_dt[i])
+                    burnrate_trimmed_imperial = np.append(burnrate_trimmed_imperial, ds_dt_imperial[i])
+                    started_adding = True
+                i += 1
+            high_avg_press = np.trapezoid(press_trimmed, time_trimmed) / (time_trimmed[len(time_trimmed)-1] - time_trimmed[0])
+            high_avg_press_imperial = high_avg_press*145.03773773
+            high_avg_burnrate = np.trapezoid(burnrate_trimmed, time_trimmed) / (time_trimmed[len(time_trimmed)-1] - time_trimmed[0])
+            high_avg_burnrate_imperial = np.trapezoid(burnrate_trimmed_imperial, time_trimmed) / (time_trimmed[len(time_trimmed)-1] - time_trimmed[0])
+            # ----------------------------------------------------------------------------------------------------------------------------------- end avg pressure and average burnrate calculation
+            burnrate_integral = np.trapezoid(ds_dt, time)
+            burnrate_integral_imperial = np.trapezoid(ds_dt_imperial, time)
             avg_burnrate = burnrate_integral / burn_time
             avg_burnrate_imperial = burnrate_integral_imperial / burn_time
-            extra_data_arr = np.array([burn_time, impulse, press_integral, c_star, avg_press, avg_burnrate, impulse_imperial, press_integral_imperial, c_star_imperial, avg_press_imperial, avg_burnrate_imperial, isp])
-            extra_data_arr_strings = np.array(["Burn Time (sec)", "Impulse (N*s)", "Pressure Integral (MPa*s)", "C* (m/s)", "Average Pressure (MPa)", "Average Burnrate (mm/s)", "Impulse (lbf*s)", "Pressure Integral (psig*s)", "C* (ft/s)", "Average Pressure (psig)", "Average Burnrate (in/s)", "ISP (sec)"])
+            extra_data_arr = np.array([burn_time, impulse, press_integral, c_star, full_avg_press, avg_burnrate, high_avg_press, high_avg_burnrate, impulse_imperial, press_integral_imperial, c_star_imperial, full_avg_press_imperial, avg_burnrate_imperial, high_avg_press_imperial, high_avg_burnrate_imperial, isp])
+            extra_data_arr_strings = np.array(["Burn Time (sec)", "Impulse (N*s)", "Full Pressure Integral (MPa*s)", "C* (m/s)", "Average Pressure (using full fire) (MPa)", "Average Burnrate (using full fire) (mm/s)", "Average Pressure (using points above average) (MPa)", "Average Burnrate (using points above average) (mm/s)", "Impulse (lbf*s)", "Full Pressure Integral (psig*s)", "C* (ft/s)", "Average Pressure (using full fire) (psig)", "Average Burnrate (in/s) (using full fire)", "Average Pressure (using points above average) (psig)", "Average Burnrate (using points above average) (in/s)", "ISP (sec)"])
             finalDataFrame = pd.concat([finalDataFrame, pd.DataFrame({"str": extra_data_arr_strings}), pd.DataFrame({"dat": extra_data_arr})], axis=1)
 
             #write final dataframe to excel
             finalDataFrame.to_excel(excelWriter, sheet_name=str(y))
 
             #add averages to the correct arrays for later characterization calculations
-            avgPress.append(avg_press)
-            avgPressImperial.append(avg_press_imperial)
+            avgPress.append(full_avg_press)
+            avgPressImperial.append(full_avg_press_imperial)
             avgBurnrate.append(avg_burnrate)
             avgBurnrateImperial.append(avg_burnrate_imperial)
+            avgPressHigh.append(high_avg_press)
+            avgPressImperialHigh.append(high_avg_press_imperial)
+            avgBurnrateHigh.append(high_avg_burnrate)
+            avgBurnrateImperialHigh.append(high_avg_burnrate_imperial)
 
             y += 1
         
@@ -478,19 +508,21 @@ def outputResults():
         def func_powerlaw(x, a, n):
             return a * x**n
         
+        #power law fit for original average pressure and burnrate calculation
         params, covariance = curve_fit(func_powerlaw, avgPress, avgBurnrate, maxfev=6000)
         a, n = params
+        residuals = avgBurnrate - func_powerlaw(np.array(avgPress), *params)
+        ss_res = np.sum(residuals**2)
+        ss_tot = np.sum((avgBurnrate - np.mean(avgBurnrate))**2)
+        r_squared = 1 - (ss_res / ss_tot)
         params_imperial, covariance_imperial = curve_fit(func_powerlaw, avgPressImperial, avgBurnrateImperial, maxfev=6000)
         a_imperial, n_imperial = params_imperial
-        strings = np.array(["Metric (MPa and mm):", "a", "n", "Imperial (psig and in):", "a", "n"])
-        data = np.array([None, a, n, None, a_imperial, n_imperial])
+        strings = np.array(["Metric (MPa and mm):", "a", "n", "Imperial (psig and in):", "a", "n", " ", "R^2"])
+        data = np.array([None, a, n, None, a_imperial, n_imperial, None, r_squared])
         characterizationDataframe = pd.concat([pd.DataFrame({"str": strings}), pd.DataFrame({"dat": data})], axis=1)
-        characterizationDataframe.to_excel(excelWriter, sheet_name="Characterization")
+        characterizationDataframe.to_excel(excelWriter, sheet_name="CharacterizationOld")
 
-        #TODO: delete sheet named "Sheet" in the excel workbook
-        excelWriter.close()
-
-        #output characterization plots
+        #output characterization plots (for original average pressure and burnrate calculation)
         x_metric = np.linspace(0, 6, 300)
         y_metric = a * (x_metric**n)
         plt.figure(figsize=(13, 8))
@@ -510,6 +542,44 @@ def outputResults():
         plt.ylabel("Average Burn Rate (in/sec)")
         plt.savefig(outputFileDir + "/characterization_imperial_" + str(x))
         plt.close()
+
+        #power law fit for new average pressure and burnrate calculation
+        params2, covariance2 = curve_fit(func_powerlaw, avgPressHigh, avgBurnrateHigh, maxfev=6000)
+        a2, n2 = params2
+        residuals = avgBurnrateHigh - func_powerlaw(np.array(avgPressHigh), *params2)
+        ss_res = np.sum(residuals**2)
+        ss_tot = np.sum((avgBurnrateHigh - np.mean(avgBurnrateHigh))**2)
+        r_squared2 = 1 - (ss_res / ss_tot)
+        params2_imperial, covariance_imperial2 = curve_fit(func_powerlaw, avgPressImperialHigh, avgBurnrateImperialHigh, maxfev=6000)
+        a2_imperial, n2_imperial = params2_imperial
+        strings2 = np.array(["Metric (MPa and mm):", "a", "n", "Imperial (psig and in):", "a", "n", " ", "R^2"])
+        data2 = np.array([None, a2, n2, None, a2_imperial, n2_imperial, None, r_squared2])
+        characterizationDataframe = pd.concat([pd.DataFrame({"str": strings2}), pd.DataFrame({"dat": data2})], axis=1)
+        characterizationDataframe.to_excel(excelWriter, sheet_name="CharacterizationNew")
+
+        #output characterization plots (for updated average pressure and burnrate calculation)
+        x_metric = np.linspace(0, 6, 300)
+        y_metric = a2 * (x_metric**n2)
+        plt.figure(figsize=(13, 8))
+        plt.plot(x_metric, y_metric, linestyle='--', label="Power Law Fit")
+        plt.scatter(avgPressHigh, avgBurnrateHigh, marker='o', c='b', label="Average Burnrate vs. Average Pressure")
+        plt.xlabel("Average Pressure (MPa)")
+        plt.ylabel("Average Burn Rate (mm/sec)")
+        plt.savefig(outputFileDir + "/characterization_metric_new_" + str(x))
+        plt.close()
+
+        x_imperial = np.linspace(0, 700, 300)
+        y_imperial = a2_imperial * (x_imperial**n2_imperial)
+        plt.figure(figsize=(13, 8))
+        plt.plot(x_imperial, y_imperial, linestyle='--', label="Power Law Fit")
+        plt.scatter(avgPressImperialHigh, avgBurnrateImperialHigh, marker='o', c='b', label="Average Burnrate vs. Average Pressure")
+        plt.xlabel("Average Pressure (psig)")
+        plt.ylabel("Average Burn Rate (in/sec)")
+        plt.savefig(outputFileDir + "/characterization_imperial_new_" + str(x))
+        plt.close()
+
+        #TODO: delete sheet named "Sheet" in the excel workbook
+        excelWriter.close()
 
         x += 1
 
