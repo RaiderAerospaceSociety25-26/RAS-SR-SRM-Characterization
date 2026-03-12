@@ -11,9 +11,11 @@ import matplotlib.pyplot as plt
 import openpyxl
 from openpyxl import Workbook
 
+#TODO: ADD SMOOTHING OPTION FOR THRUST AND PRESSURE DATA!!!
+
 # ----------------------------- GLOBAL VARIABLES ----------------------------
-configFilename = '../dat/test_config.txt' #INPUT: MUST SET THIS FILENAME TO THE NAME OF THE CONFIGURATION FILE
-dataFilenameBase = '../dat/' #filename base for the Excel sheet; leave as a blank string except for any required prefix (default: '../dat/')
+configFilename = '../dat/sample_test_config.txt' #INPUT: MUST SET THIS FILENAME TO THE NAME OF THE CONFIGURATION FILE
+dataFilenameBase = '../dat/' #filename base for the Excel sheet; leave as a blank string except for any required prefix (default: '../dat/')    
 testFires = [] #array to use to hold TestFire objects
 
 
@@ -212,7 +214,7 @@ def characterization():
         A_b = 0.0
         i = 0
         for num in D:
-            A_b += math.pi*((0.5*((math.pow(D[i],2))-math.pow((d_0[i]+(2*s)),2)) + (L_0[i]-(2*s))*(d_0[i]+(2*s)))) #SOMETHING IS THROWING AN ARRAY-RELATED ERROR HERE!!!
+            A_b += math.pi*((0.5*((math.pow(D[i],2))-math.pow((d_0[i]+(2*s.item())),2)) + (L_0[i]-(2*s.item()))*(d_0[i]+(2*s.item()))))
             i += 1
         zero_func = ds - ((A_t*P*dt)/(A_b*rho_b*c_star))
         return zero_func
@@ -242,9 +244,9 @@ def characterization():
                     dt = calc.get_time().iloc[i] - calc.get_time().iloc[i-1]
                     s_prev = sArr[i-1]
                     ds_new = fsolve(characterizationEqns, s_initial, args=(D, d_0, L_0, rho_b, A_t, dt, P, s_prev, c_star))
-                    dsArr.append(float(ds_new))
-                    sArr.append(sArr[i-1] + float(ds_new))
-                    ds_dt_arr.append(float(ds_new/dt))
+                    dsArr.append(float(ds_new.item()))
+                    sArr.append(sArr[i-1] + float(ds_new.item()))
+                    ds_dt_arr.append(float(ds_new.item())/dt)
                 else:
                     sArr.append(0)
                     dsArr.append(0)
@@ -558,7 +560,7 @@ def outputResults():
         characterizationDataframe.to_excel(excelWriter, sheet_name="CharacterizationNew")
 
         #output characterization plots (for updated average pressure and burnrate calculation)
-        x_metric = np.linspace(0, 6, 300)
+        x_metric = np.linspace(0, 8, 300)
         y_metric = a2 * (x_metric**n2)
         plt.figure(figsize=(13, 8))
         plt.plot(x_metric, y_metric, linestyle='--', label="Power Law Fit")
@@ -568,7 +570,7 @@ def outputResults():
         plt.savefig(outputFileDir + "/characterization_metric_new_" + str(x))
         plt.close()
 
-        x_imperial = np.linspace(0, 700, 300)
+        x_imperial = np.linspace(0, 1100, 300)
         y_imperial = a2_imperial * (x_imperial**n2_imperial)
         plt.figure(figsize=(13, 8))
         plt.plot(x_imperial, y_imperial, linestyle='--', label="Power Law Fit")
