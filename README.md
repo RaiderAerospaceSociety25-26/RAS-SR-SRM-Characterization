@@ -48,6 +48,8 @@ The file should be a regular .txt file and the filename and path must be denoted
 
 The benefit of using this configuration file is that changing the configuration file name in the script is the only change required to the script for any run.
 
+Note that for one propellant, only one 9-line entry is required.
+
 ### Excel Formatting
 Each workbook used with this script must include sheets that include data for each fire. The first column of each sheet should be time, the second column should be pressure, and the third column should be thrust. It doesn't matter if the data has a header or not (but if it does, this header must not be more than one row). Example inputs and outputs are included in this repository. Ensure your entries follow the established format, or the code will not work.
 
