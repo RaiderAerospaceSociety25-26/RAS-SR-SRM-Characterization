@@ -5,18 +5,17 @@ from TestFire import TestFire
 from Calculation import Calculation
 from scipy.optimize import fsolve
 from scipy.optimize import curve_fit
+from scipy.ndimage import gaussian_filter1d
 import numpy as np
 import math
 import matplotlib.pyplot as plt
 import openpyxl
 from openpyxl import Workbook
 
-#TODO: ADD SMOOTHING OPTION FOR THRUST AND PRESSURE DATA!!!
-
 # ----------------------------- GLOBAL VARIABLES ----------------------------
 configFilename = '../dat/sample_test_config.txt' #INPUT: MUST SET THIS FILENAME TO THE NAME OF THE CONFIGURATION FILE
 dataFilenameBase = '../dat/' #filename base for the Excel sheet; leave as a blank string except for any required prefix (default: '../dat/')    
-testFires = [] #array to use to hold TestFire objects
+testFires = [] #array to hold TestFire objects
 
 
 # ---------------- READ DATA AND CREATE TESTFIRE OBJECTS ------------------------
@@ -46,14 +45,34 @@ def readImportOptions():
     #results in configLinesEdited being an array of an array of strings with each string element being a line of options
     return configLinesEdited
 
+#function to smooth data. inputs are data (array containing data you want to smooth), time (time array associated with the data array), and window_duration (number controlling how much smoothing to do)
+def smoothData(data, time, window_duration):
+    if window_duration == -1: return data
+
+    dt = np.diff(time)
+    avg_dt = np.mean(dt)
+    sampling_rate = 1 / avg_dt  # Hz
+
+    # Convert window duration (in seconds) to sigma in sample units
+    samples_per_window = window_duration / avg_dt
+    sigma_samples = samples_per_window / 2.355  # FWHM ≈ 2.355σ for Gaussian
+
+    # Apply Gaussian filter
+    smoothed_data = gaussian_filter1d(data, sigma=sigma_samples)
+
+    return smoothed_data
+
+
 #creates each TestFire object and sets the import options for each using the allConfigs array
 def setImportOptions(allConfigs):
     for x in range(len(allConfigs)):
         fileEntry = allConfigs[x][0].split(" ")
-        geomEntry = allConfigs[x][1].split(" ")
-        throatEntry = allConfigs[x][2].split(" ")
-        massEntry = allConfigs[x][3].split(" ")
-        densityEntry = allConfigs[x][4].split(" ")
+        psmoothingEntry = allConfigs[x][1].split(" ")
+        tsmoothingEntry = allConfigs[x][2].split(" ")
+        geomEntry = allConfigs[x][3].split(" ")
+        throatEntry = allConfigs[x][4].split(" ")
+        massEntry = allConfigs[x][5].split(" ")
+        densityEntry = allConfigs[x][6].split(" ")
         arr = []
         for y in range(len(throatEntry)-2): #for each fire, set filename, pressure units, thrust units, geometry units, geometry, throat units, and throat
             testFire = TestFire()
@@ -66,6 +85,27 @@ def setImportOptions(allConfigs):
                 testFire.set_sheetnames(sheetnames)
                 testFire.set_pressUnits(fileEntry[2])
                 testFire.set_thrustUnits(fileEntry[3])
+            else: throwParseError()
+            if (psmoothingEntry[0] == "psmoothing"):
+                if psmoothingEntry[1] == "off":
+                    testFire.set_psmoothing(False)
+                elif psmoothingEntry[1] == "on":
+                    testFire.set_psmoothing(True)
+                    numArr = []
+                    for i in range(2, len(psmoothingEntry)):
+                        numArr.append(float(psmoothingEntry[i]))
+                    testFire.set_psmoothingArr(numArr)
+                else: throwParseError()
+            else: throwParseError()
+            if (tsmoothingEntry[0] =="tsmoothing"):
+                if tsmoothingEntry[1] == "off": testFire.set_tsmoothing(False)
+                elif tsmoothingEntry[1] == "on":
+                    testFire.set_tsmoothing(True)
+                    numArr = []
+                    for i in range(2, len(tsmoothingEntry)):
+                        numArr.append(float(tsmoothingEntry[i]))
+                    testFire.set_tsmoothingArr(numArr)
+                else: throwParseError()
             else: throwParseError()
             if (geomEntry[0] == "geometry"):
                 testFire.set_geomUnits(geomEntry[1])
@@ -99,6 +139,7 @@ def readExcelData(allConfigs):
     for tfList in testFires:
         y = 0
         for tf in tfList:
+            print("Reading data from input Excel to: " + str(testFires[x][y]))
             tfObj = testFires[x][y]
             testFires[x][y].set_dat(pd.read_excel((dataFilenameBase + tfObj.get_filename()), tfObj.get_sheetnames()[y]))
             y += 1
@@ -125,11 +166,21 @@ def conversionsAndDefinitions():
             if (tf.get_pressUnits() == "psig"): press = data.iloc[:,1]*6894.76 #convert psi to Pa
             elif (tf.get_pressUnits() == "kPa"): press = data.iloc[:,1]*1000 #convert kPa to Pa
             else: throwParseError()
-            
+
+            #smoothed pressure
+            if (tf.get_psmoothing() == False): press_smoothed = None
+            elif (tf.get_psmoothing() == True):
+                press_smoothed = smoothData(press, time, tf.get_psmoothingArr()[y])
+
             #thrust
             if (tf.get_thrustUnits() == "N"): thrust = data.iloc[:,2]
             elif (tf.get_thrustUnits() == "lbf"): thrust = data.iloc[:,2]*4.44822 #convert lbf to N
             else: throwParseError()
+
+            #smoothed thrust
+            if (tf.get_tsmoothing() == False): thrust_smoothed = None
+            elif (tf.get_tsmoothing() == True):
+                thrust_smoothed = smoothData(thrust, time, tf.get_tsmoothingArr()[y])
 
             #mass
             if (tf.get_thrustUnits() == "N"): mass = tf.get_mass()
@@ -142,21 +193,21 @@ def conversionsAndDefinitions():
             else: throwParseError()
             
             #throat_area
-            if (tf.get_throatUnits() == "m"): throat_area = math.pi*(math.pow(tf.get_throat(),2)/4)
+            if (tf.get_throatUnits() == "mm"): throat_area = math.pi*(math.pow(tf.get_throat()*1000,2)/4) #convert to m^2
             elif (tf.get_throatUnits() == "in"): throat_area = math.pi*(math.pow((tf.get_throat()*0.0254),2)/4) #convert to m^2
             else: throwParseError()
 
             #grain_length
             grain_len = []
             for grain in tf.get_geometry():
-                if (tf.get_geomUnits() == "m"): grain_len.append(float(grain[0]))
+                if (tf.get_geomUnits() == "mm"): grain_len.append(float(grain[0]))
                 elif (tf.get_geomUnits() == "in"): grain_len.append(float(grain[0])*0.0254) #convert to m
                 else: throwParseError()
 
             #grain_init_core
             grain_init_core = []
             for grain in tf.get_geometry():
-                if (tf.get_geomUnits() == "m"): grain_init_core.append(float(grain[1]))
+                if (tf.get_geomUnits() == "mm"): grain_init_core.append(float(grain[1]))
                 elif (tf.get_geomUnits() == "in"): grain_init_core.append(float(grain[1])*0.0254) #convert to m
                 else: throwParseError()
 
@@ -168,10 +219,12 @@ def conversionsAndDefinitions():
                 else: throwParseError()
 
             #impulse
-            impulse = np.trapezoid(thrust, time)
+            if (tf.get_tsmoothing() == True): impulse = np.trapezoid(thrust_smoothed, time)
+            else: impulse = np.trapezoid(thrust, time)
 
             #press_integral
-            press_integral = np.trapezoid(press, time)
+            if (tf.get_psmoothing() == True): press_integral = np.trapezoid(press_smoothed, time)
+            else: press_integral = np.trapezoid(press, time)
 
             #c_star
             c_star = (throat_area/mass)*press_integral
@@ -180,8 +233,9 @@ def conversionsAndDefinitions():
             isp = impulse/(mass*9.81)
 
             #make Calculation object and add it to the proper TestFire object
-            calc = Calculation(time, press, thrust, mass, density, throat_area, grain_len, grain_init_core, grain_OD, burn_time, impulse, press_integral, c_star, isp)
+            calc = Calculation(time, press, thrust, press_smoothed, thrust_smoothed, mass, density, throat_area, grain_len, grain_init_core, grain_OD, burn_time, impulse, press_integral, c_star, isp)
             testFires[x][y].set_calculation(calc)
+            print("Set calculation " + str(calc) + " for " + str(testFires[x][y]))
 
             #increment
             y += 1
@@ -236,7 +290,9 @@ def characterization():
                 L_0 = calc.get_grain_len()
                 rho_b = calc.get_density()
                 A_t = calc.get_throat_area()
-                P = calc.get_press().iloc[i] # instantaneous pressure
+                P = 0 # instantaneous pressure
+                if tf.get_psmoothing() == True: P = calc.get_press_smoothed()[i]
+                else: P = calc.get_press().iloc[i]
                 c_star = calc.get_c_star()
                 dt = 0
                 s_prev = 0
@@ -263,7 +319,9 @@ def characterization():
             testFires[x][y].get_calculation().set_sArr(sArr)
             testFires[x][y].get_calculation().set_dsArr(dsArr)
             testFires[x][y].get_calculation().set_ds_dtArr(ds_dt_arr)
+            print("Finished characterization calculation for " + str(testFires[x][y]))
             y += 1
+        print("Finished characterization calculation for propellant #" + str(x+1))
         x += 1
 
 #function to perform conversions of important output data back to imperial and output to an Excel sheet
@@ -332,14 +390,18 @@ def outputResults():
             outputFileBase2 = outputFileDir + "/" + str(x) + "," + str(y) + "_"
 
             time = calc.get_time() #sec
-            thrust = calc.get_thrust() #N
-            press = calc.get_press()/1000000 #convert to MPa
+            thrust_original = calc.get_thrust() #N
+            thrust = thrust_original
+            if tf.get_tsmoothing() == True: thrust = calc.get_thrust_smoothed()
+            press_original = calc.get_press()/1000000 #convert to MPa
+            press = press_original
+            if tf.get_psmoothing() == True: press = calc.get_press_smoothed()/1000000 #convert to MPa
             s = calc.get_sArr()
             ds = calc.get_dsArr()
             A_b = calc.get_A_bArr()
             ds_dt = [i * 1000 for i in calc.get_ds_dtArr()] #convert to mm/sec
-            thrust_imperial = calc.get_thrust()*0.224809 #convert to lbf
-            press_imperial = calc.get_press()*0.000145038 #convert to psig
+            thrust_imperial = thrust*0.224809 #convert to lbf
+            press_imperial = press*145.03774 #convert to psig
             s_imperial = [i * 39.3701 for i in calc.get_sArr()] #convert to inches
             ds_imperial = [i * 39.3701 for i in calc.get_dsArr()] #convert to inches
             A_b_imperial = [i * 1550.0031 for i in calc.get_A_bArr()] #convert to in^2
@@ -436,8 +498,8 @@ def outputResults():
             #concatenate the rest of the data with the original data
             finalDataFrame = pd.concat(
                 [finalDataFrame, pd.DataFrame({"Time (sec)": time}),
-                 pd.DataFrame({"Pressure (MPa)": press}),
-                 pd.DataFrame({"Thrust (N)": thrust}),
+                 pd.DataFrame({"Pressure (MPa)": press_original}),
+                 pd.DataFrame({"Thrust (N)": thrust_original}),
                  pd.DataFrame({"Burn Area A_b (m^2)": A_b}),
                  pd.DataFrame({"Instantaneous Regression ds (m)": ds}),
                  pd.DataFrame({"Cumulative Regression s (m)": s}),
@@ -487,8 +549,18 @@ def outputResults():
             burnrate_integral_imperial = np.trapezoid(ds_dt_imperial, time)
             avg_burnrate = burnrate_integral / burn_time
             avg_burnrate_imperial = burnrate_integral_imperial / burn_time
-            extra_data_arr = np.array([burn_time, impulse, press_integral, c_star, full_avg_press, avg_burnrate, high_avg_press, high_avg_burnrate, impulse_imperial, press_integral_imperial, c_star_imperial, full_avg_press_imperial, avg_burnrate_imperial, high_avg_press_imperial, high_avg_burnrate_imperial, isp])
-            extra_data_arr_strings = np.array(["Burn Time (sec)", "Impulse (N*s)", "Full Pressure Integral (MPa*s)", "C* (m/s)", "Average Pressure (using full fire) (MPa)", "Average Burnrate (using full fire) (mm/s)", "Average Pressure (using points above average) (MPa)", "Average Burnrate (using points above average) (mm/s)", "Impulse (lbf*s)", "Full Pressure Integral (psig*s)", "C* (ft/s)", "Average Pressure (using full fire) (psig)", "Average Burnrate (in/s) (using full fire)", "Average Pressure (using points above average) (psig)", "Average Burnrate (using points above average) (in/s)", "ISP (sec)"])
+            if tf.get_throatUnits() == "mm":
+                throat_diameter = tf.get_throat()
+                throat_area = math.pow(throat_diameter, 2) * math.pi / 4
+                throat_diameter_imperial = throat_diameter/25.4
+                throat_area_imperial = throat_area/(math.pow(25.4, 2))
+            elif tf.get_throatUnits() == "in":
+                throat_diameter_imperial = tf.get_throat()
+                throat_area_imperial = math.pow(throat_diameter_imperial, 2) * math.pi / 4
+                throat_diameter = throat_diameter_imperial*25.4
+                throat_area = math.pow(throat_diameter, 2) * math.pi / 4
+            extra_data_arr = np.array([throat_area, throat_diameter, throat_area_imperial, throat_diameter_imperial, burn_time, impulse, press_integral, c_star, full_avg_press, avg_burnrate, high_avg_press, high_avg_burnrate, impulse_imperial, press_integral_imperial, c_star_imperial, full_avg_press_imperial, avg_burnrate_imperial, high_avg_press_imperial, high_avg_burnrate_imperial, isp])
+            extra_data_arr_strings = np.array(["Throat Area (mm^2)", "Throat Diameter (mm)", "Throat Area (in^2)", "Throat Diameter (in)", "Burn Time (sec)", "Impulse (N*s)", "Full Pressure Integral (MPa*s)", "C* (m/s)", "Average Pressure (using full fire) (MPa)", "Average Burnrate (using full fire) (mm/s)", "Average Pressure (using points above average) (MPa)", "Average Burnrate (using points above average) (mm/s)", "Impulse (lbf*s)", "Full Pressure Integral (psig*s)", "C* (ft/s)", "Average Pressure (using full fire) (psig)", "Average Burnrate (in/s) (using full fire)", "Average Pressure (using points above average) (psig)", "Average Burnrate (using points above average) (in/s)", "ISP (sec)"])
             finalDataFrame = pd.concat([finalDataFrame, pd.DataFrame({"str": extra_data_arr_strings}), pd.DataFrame({"dat": extra_data_arr})], axis=1)
 
             #write final dataframe to excel
@@ -582,6 +654,8 @@ def outputResults():
 
         #TODO: delete sheet named "Sheet" in the excel workbook
         excelWriter.close()
+
+        print("Wrote all data to Excel and output figures for propellant #" + str(x+1))
 
         x += 1
 

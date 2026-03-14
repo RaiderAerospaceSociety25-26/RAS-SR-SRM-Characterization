@@ -1,5 +1,5 @@
 class TestFire:
-    # def __init__(self, filename, sheetnames, fireIndex, pressUnits, thrustUnits, geomUnits, throatUnits, geometry, throat, massUnits, mass, densityUnits, density, dat, calculation):
+    # def __init__(self, filename, sheetnames, psmoothing, psmoothingArr, tsmoothing, tsmoothingArr, fireIndex, pressUnits, thrustUnits, geomUnits, throatUnits, geometry, throat, massUnits, mass, densityUnits, density, dat, calculation):
     #     self._filename = filename
     #     self._sheetnames = sheetnames
     #     self._fireIndex = fireIndex
@@ -14,7 +14,7 @@ class TestFire:
     #     self._densityUnits = densityUnits
     #     self._density = density
     #     self._dat = dat
-        # self._calculation = calculation
+    #     self._calculation = calculation
     
     def __init__(self):
         pass
@@ -32,6 +32,30 @@ class TestFire:
 
     def set_sheetnames(self, value):
         self._sheetnames = value
+
+    def get_psmoothing(self):
+        return self._psmoothing
+
+    def set_psmoothing(self, value):
+        self._psmoothing = value
+
+    def get_psmoothingArr(self):
+        return self._psmoothingArr
+
+    def set_psmoothingArr(self, value):
+        self._psmoothingArr = value
+
+    def get_tsmoothing(self):
+        return self._tsmoothing
+
+    def set_tsmoothing(self, value):
+        self._tsmoothing = value
+
+    def get_tsmoothingArr(self):
+        return self._tsmoothingArr
+
+    def set_tsmoothingArr(self, value):
+        self._tsmoothingArr = value
 
     def get_fireIndex(self):
         return self._fireIndex

@@ -1,10 +1,12 @@
 class Calculation:
 
     #any and all necessary calculations and unit conversions are here. units are exclusively metric (N, Pa, kg, kg/m^3, m, etc.)
-    def __init__(self, time, press, thrust, mass, density, throat_area, grain_len, grain_init_core, grain_OD, burn_time, impulse, press_integral, c_star, isp):
+    def __init__(self, time, press, thrust, press_smoothed, thrust_smoothed, mass, density, throat_area, grain_len, grain_init_core, grain_OD, burn_time, impulse, press_integral, c_star, isp):
         self._time = time
         self._press = press
         self._thrust = thrust
+        self._press_smoothed = press_smoothed
+        self._thrust_smoothed = thrust_smoothed
         self._mass = mass
         self._density = density
         self._throat_area = throat_area
@@ -36,6 +38,18 @@ class Calculation:
 
     def set_thrust(self, value):
         self._thrust = value
+    
+    def get_press_smoothed(self):
+        return self._press_smoothed
+
+    def set_press_smoothed(self, value):
+        self._press_smoothed = value
+    
+    def get_thrust_smoothed(self):
+        return self._thrust_smoothed
+
+    def set_thrust_smoothed(self, value):
+        self._thrust_smoothed = value
 
     def get_mass(self):
         return self._mass
